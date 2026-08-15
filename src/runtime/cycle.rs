@@ -1985,6 +1985,25 @@ struct CycleHostImpl<'a> {
     thread_parent: Option<EventSeq>,
 }
 
+/// The `kind` tag stamped on every approval-blocked notification (issue #750).
+/// Deliberately a free-form tag, not a taxonomy — the vocabulary of what is
+/// "worth sending" is EPIC #558's to define and #750 must not invent one.
+const APPROVAL_NOTIFICATION_KIND: &str = "approval_blocked";
+
+/// A one-line, operator-readable title for a parked approval.
+///
+/// Carries only the effect **kind** (a tool/effect name) and the **agent** whose
+/// work is blocked — never the payload. This mirrors the deliberately thin
+/// `ApprovalParked` event: the console's `pending_approvals()` is the single
+/// place host-side redaction runs (issue #372), and a payload-bearing second
+/// surface is exactly what that design avoids.
+fn approval_notification_title(effect: &Effect) -> String {
+    match effect.agent.as_deref() {
+        Some(agent) if !agent.is_empty() => format!("{agent} needs approval to {}", effect.kind),
+        _ => format!("Approval needed: {}", effect.kind),
+    }
+}
+
 impl<'a> CycleHostImpl<'a> {
     fn new(
         company: CompanyId,
@@ -2144,7 +2163,53 @@ impl<'a> CycleHostImpl<'a> {
             thread = self.thread_id.as_deref().unwrap_or("-"),
             "[cycle] parked effect for operator approval"
         );
+        // Issue #750: a parked approval blocks work a person must act on. Raise
+        // the durable notification and leave it undelivered; out-of-browser
+        // delivery is the digest's job (issue #751), which batches an evening of
+        // parks into one email. Best-effort and strictly after the journal write
+        // above — see the method.
+        self.notify_parked_approval(&approval_id, &effect).await;
         Ok(approval_id)
+    }
+
+    /// Records a durable notification for the parked approval (issues #749/#750).
+    ///
+    /// **Best-effort and record-only.** The binding record is the parked journal
+    /// entry written by [`park`](Self::park); this appends the durable
+    /// notification on top of it, and any failure is logged rather than
+    /// propagated — a park that already happened must not be undone by a store
+    /// error. It does **not** email: out-of-browser delivery is the digest's job
+    /// (issue #751), which batches the overnight firehose into one message rather
+    /// than one per park (`CompanyScheduler::tick_digest`). The notification
+    /// carries only the effect kind + agent
+    /// (see [`approval_notification_title`]), never the payload.
+    ///
+    /// The classification is consumed, not invented (#750 / #558): reaching this
+    /// method *is* the signal — an effect is here only after the gate judged it
+    /// `Reach::Consequence` and parked it. Every parked approval blocks work.
+    async fn notify_parked_approval(&self, approval_id: &ApprovalId, effect: &Effect) {
+        let notification = crate::ports::notifications::Notification {
+            id: crate::ports::generate_id(),
+            kind: APPROVAL_NOTIFICATION_KIND.to_string(),
+            subject: crate::ports::notifications::Subject {
+                kind: crate::ports::notifications::SubjectKind::Approval,
+                id: approval_id.to_string(),
+            },
+            created_at: now_millis(),
+            title: approval_notification_title(effect),
+        };
+        if let Err(err) = self
+            .rt
+            .notifications()
+            .append(&self.company, &notification)
+            .await
+        {
+            tracing::warn!(
+                approval_id = %approval_id,
+                error = %err,
+                "approval parked and journaled, but recording its notification failed",
+            );
+        }
     }
 
     /// Intercepts the `send_email` tool: parses `to`/`subject`/`body`, checks
@@ -6634,6 +6699,115 @@ mod test {
         assert!(
             !rt.pending_approvals()[0].broadly_grantable,
             "sending mail stays a per-call decision"
+        );
+    }
+
+    // --- Approval notifications (issue #750) --------------------------------
+
+    /// A parked approval records a durable notification (issue #749 substrate),
+    /// subject `Approval`, keyed by the approval id, unread until opened. Written
+    /// synchronously in `park`, so it is readable the moment the park returns and
+    /// survives a deployment with no mailbox wired.
+    #[tokio::test]
+    async fn a_parked_approval_raises_a_durable_notification() {
+        let home_dir = tmp_home();
+        let (rt, approval_id) = park_one(
+            home_dir.path().to_path_buf(),
+            harness_effect(
+                "engineer",
+                "shell",
+                serde_json::json!({ "command": "./deploy.sh" }),
+            ),
+        )
+        .await;
+
+        let notes = rt.notifications().list(rt.id(), "any-user").await.unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(
+            notes[0].notification.subject.kind,
+            crate::ports::notifications::SubjectKind::Approval
+        );
+        assert_eq!(notes[0].notification.subject.id, approval_id.to_string());
+        assert_eq!(notes[0].notification.kind, "approval_blocked");
+        // Per-user read state (issue #749): unread until someone opens it.
+        assert!(notes[0].read_at.is_none());
+        // The title names the asker and what parked, and carries no payload.
+        assert!(notes[0].notification.title.contains("engineer"));
+        assert!(notes[0].notification.title.contains("shell"));
+    }
+
+    /// A parked approval is **record-only** (issue #751): it raises the durable
+    /// notification and queues it undelivered, but does **not** email on the
+    /// park — out-of-browser delivery is the digest's job, so the overnight
+    /// firehose becomes one message. This pins that the per-park send is gone.
+    #[tokio::test]
+    async fn a_parked_approval_records_but_does_not_email() {
+        let home_dir = tmp_home();
+        let sender = Arc::new(RecordingMailSender::new());
+        let rt = RuntimeBuilder::new(home_dir.path().to_path_buf(), manifest("supervised"))
+            .with_brain(Arc::new(EffectBrain {
+                effect: harness_effect(
+                    "engineer",
+                    "shell",
+                    serde_json::json!({ "command": "./deploy.sh" }),
+                ),
+            }))
+            .with_mail(CompanyMail {
+                sender: sender.clone(),
+                smtp: test_smtp("ceo@acme.test"),
+            })
+            .with_bootstrap_admin(Some("boss@acme.test".into()))
+            .build()
+            .await
+            .unwrap();
+
+        let report = rt
+            .run_cycle(vec![CompanyEvent::OperatorMessage {
+                parent: None,
+                text: "do it".into(),
+                by: None,
+                chat: None,
+            }])
+            .await
+            .unwrap();
+        assert_eq!(report.parked.len(), 1);
+
+        // The durable notification is recorded and queued for the digest...
+        assert_eq!(
+            rt.notifications().list(rt.id(), "x").await.unwrap().len(),
+            1
+        );
+        assert_eq!(
+            rt.notifications().undelivered(rt.id()).await.unwrap().len(),
+            1,
+            "the parked approval is queued undelivered for the digest"
+        );
+
+        // ...but the park itself sends no email — give any (wrongly) spawned send
+        // a chance to run, then assert silence. The digest, not the park, mails.
+        for _ in 0..50 {
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            sender.sent().is_empty(),
+            "the park must not email; the digest delivers"
+        );
+    }
+
+    /// The title names the asker when the effect carries one, and degrades to a
+    /// plain sentence when it does not — always the effect kind, never payload.
+    #[test]
+    fn approval_title_names_the_agent_when_present() {
+        let with_agent = harness_effect("cfo", "email.send", serde_json::json!({}));
+        assert_eq!(
+            approval_notification_title(&with_agent),
+            "cfo needs approval to email.send"
+        );
+        let mut no_agent = with_agent.clone();
+        no_agent.agent = None;
+        assert_eq!(
+            approval_notification_title(&no_agent),
+            "Approval needed: email.send"
         );
     }
 }
