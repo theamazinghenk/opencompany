@@ -10,7 +10,7 @@ contact_links:
     url: https://github.com/tinyhumansai/opencompany/discussions/categories/rfcs
     about: New surfaces, storage or journal changes, anything that breaks an existing company.
   - name: Show your company
-    url: https://github.com/tinyhumansai/opencompany/discussions/categories/show-and-tell
+    url: https://github.com/tinyhumansai/opencompany/discussions/categories/show-your-company
     about: What you are running on OpenCompany, and what you learned running it.
   - name: Report a security issue
     url: https://github.com/tinyhumansai/opencompany/security/policy

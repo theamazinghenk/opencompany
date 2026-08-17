@@ -22,12 +22,12 @@ catch-all; Ideas and Polls are retired into RFCs and Announcements.
 | --- | --- | --- | --- |
 | Announcements | `announcements` | no | Releases, breaking changes, anything a running company must act on. Maintainers post; anyone comments. |
 | Running a company | `running-a-company` | yes | `company.toml`, roles, approvals, workflows — using the product rather than operating the server. |
-| Agents & runs | `agents-and-runs` | yes | A run that stalled, steering, planning, the OpenHuman launcher, TinyAgents. |
-| Storage & tenancy | `storage-and-tenancy` | yes | Backends, data directories, db-per-tenant and shared-single-DB, exports and bundles. |
+| Agents and runs | `agents-and-runs` | yes | A run that stalled, steering, planning, the OpenHuman launcher, TinyAgents. |
+| Storage and tenancy | `storage-and-tenancy` | yes | Backends, data directories, db-per-tenant and shared-single-DB, exports and bundles. |
 | Self-hosting | `self-hosting` | yes | Docker, the entrypoint, reverse proxies, TLS, `/healthz`, wake-on-request. |
 | RFCs | `rfcs` | no | Changes big enough that finding out at PR review is too late. |
 | Q&A | `q-a` | yes | Everything else someone is stuck on. |
-| Show your company | `show-and-tell` | no | What people are running on this. |
+| Show your company |  `show-your-company` | no | What people are running on this. |
 | General | `general` | no | The catch-all. Triage moves posts out of it. |
 
 Five of these have a form under

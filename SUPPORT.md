@@ -10,7 +10,7 @@ Pick the channel by what you have, not by how urgent it feels.
 | Reproducible behavior that should change | [A bug report](https://github.com/tinyhumansai/opencompany/issues/new?template=bug_report.yml) |
 | A small, well-shaped feature request | [A feature request](https://github.com/tinyhumansai/opencompany/issues/new?template=feature_request.yml) |
 | A change big enough to break someone | [RFCs](https://github.com/tinyhumansai/opencompany/discussions/categories/rfcs) |
-| A company you are running on this | [Show your company](https://github.com/tinyhumansai/opencompany/discussions/categories/show-and-tell) |
+| A company you are running on this | [Show your company](https://github.com/tinyhumansai/opencompany/discussions/categories/show-your-company) |
 | A vulnerability | [The security policy](SECURITY.md) — never a public thread |
 
 ## What to bring
