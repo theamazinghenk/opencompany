@@ -27,7 +27,7 @@ catch-all; Ideas and Polls are retired into RFCs and Announcements.
 | Self-hosting | `self-hosting` | yes | Docker, the entrypoint, reverse proxies, TLS, `/healthz`, wake-on-request. |
 | RFCs | `rfcs` | no | Changes big enough that finding out at PR review is too late. |
 | Q&A | `q-a` | yes | Everything else someone is stuck on. |
-| Show your company |  `show-your-company` | no | What people are running on this. |
+| Show your company | `show-your-company` | no | What people are running on this. |
 | General | `general` | no | The catch-all. Triage moves posts out of it. |
 
 Five of these have a form under
@@ -35,6 +35,11 @@ Five of these have a form under
 name must equal the category slug** — a template whose slug does not match a
 real category is silently ignored, which is the failure mode to check first if a
 form stops appearing.
+
+GitHub derives the slug from the name — `&` and spaces both become
+hyphens, so "Brain & memory" would slug as `brain-memory`, not
+`brain-and-memory`. Spell "and" out when creating a category, or the
+template stops matching.
 
 ## Labels
 
