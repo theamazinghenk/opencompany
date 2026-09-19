@@ -475,4 +475,5 @@ An existing stricter leading limit is retained when redelegating.
 The OpenHuman scope narrows the existing iteration-derived limit and resets
 after the turn. It is not a shared aggregate budget across independently
 spawned child runs. This change requires the companion OpenHuman scoped-budget
-API before the host's vendor pin can be updated and this patch merged.
+API ([OpenHuman #6350](https://github.com/tinyhumansai/openhuman/pull/6350))
+before the host's vendor pin can be updated and this patch merged.
