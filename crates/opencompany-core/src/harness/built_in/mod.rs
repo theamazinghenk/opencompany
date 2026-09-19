@@ -184,6 +184,7 @@ pub mod tool_dispatcher;
 pub mod tool_posture;
 pub mod toolbelt;
 pub mod triage;
+mod turn_limits;
 pub mod turn_outputs;
 /// Issue #661 (M7): `read_workflow` / `update_workflow` / `delete_workflow` —
 /// the agent's way to fix or retire a workflow instead of only ever creating
@@ -1248,6 +1249,9 @@ impl CompanyAgent {
         // answers into the wrong conversation.
         chat: crate::runtime::delegation::ChatTarget<'_>,
     ) -> (crate::Result<TurnOutcome>, Vec<TurnUsage>) {
+        // Retrieved text is context, never the source of a turn budget.
+        let original_brief = crate::runtime::delegation::current_task_hint();
+        let tool_call_limit = turn_limits::from_brief(original_brief.as_deref().unwrap_or(message));
         // Per-turn progress sink + an always-draining collector, so a burst of
         // events never blocks the turn loop on a full channel.
         //
@@ -1740,8 +1744,9 @@ impl CompanyAgent {
         // stack-overflow trap). The turn body owns the retry classification and
         // reports every attempt's usage.
         let (reply, mut usages): (crate::Result<String>, Vec<TurnUsage>) =
-            oh::agent::stop_hooks::with_stop_hooks(
+            oh::agent::stop_hooks::with_stop_hooks_and_tool_limit(
                 hooks,
+                tool_call_limit,
                 Box::pin(async {
                     let mut usages: Vec<TurnUsage> = Vec::new();
                     // CodeRabbit review (PR #2053): `agent` is the ONE `Agent`

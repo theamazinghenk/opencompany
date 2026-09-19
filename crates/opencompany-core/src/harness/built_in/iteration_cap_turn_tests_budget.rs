@@ -209,3 +209,110 @@ async fn exhausting_the_raised_cap_still_reports_an_iteration_cap_pause() {
          {MAX_TOOL_ITERATIONS} — the raised cap is not in effect"
     );
 }
+
+#[tokio::test]
+async fn explicit_tool_budget_blocks_the_fifth_call_and_resets_for_the_next_task() {
+    let mut turns = read_then_answer(4, "unused");
+    turns.pop();
+    turns.push(Turn::Call {
+        tool: "file_write".into(),
+        args: json!({"path":"must-not-exist.md","content":"over budget"}),
+    });
+    let (model_url, script) = spawn_script(turns, 12).await;
+    let dir = tempfile::tempdir().unwrap();
+    let agent = company_agent(model_url, dir.path(), None, 5).await;
+    let (result, _) = agent
+        .run("[tool_call_limit=4]\nRead four notes, then try writing a fifth tool result.")
+        .await;
+    assert!(
+        result.is_err(),
+        "budget exhaustion must not report successful completion"
+    );
+    assert_eq!(
+        model_calls(&script),
+        5,
+        "four completed reads, then the refused fifth call"
+    );
+    let workspace = agent_workspace(dir.path(), &CompanyId::new("acme"), "ceo");
+    assert!(!workspace.join("must-not-exist.md").exists());
+    // The last provider request carries actual output of the fourth read.
+    assert!(
+        script
+            .seen
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .to_string()
+            .contains("Note 3.")
+    );
+    *script.turns.lock().unwrap() = read_then_answer(1, "Next task completed.");
+    let (next, _) = agent.run("Read the first note for a new task.").await;
+    assert_eq!(
+        next.expect("the preceding tool limit must not leak").reply,
+        "Next task completed."
+    );
+}
+
+#[tokio::test]
+async fn delegated_tool_budget_survives_retrieved_context_in_the_real_pool() {
+    let (model_url, script) = spawn_script(read_then_answer(1, "Must not finish"), 12).await;
+    let dir = tempfile::tempdir().unwrap();
+    let dependencies = deps(model_url.clone(), dir.path());
+    let agent = company_agent(model_url, dir.path(), None, 1).await;
+    let company = CompanyId::new("acme");
+    let message = "[tool_call_limit=0]\nRead the budget regression note";
+    dependencies
+        .context
+        .put(
+            &company,
+            crate::ports::types::ContextChunk {
+                label: "task-outcome/ceo".into(),
+                body: format!("RETRIEVED_BUDGET_MARKER {message}"),
+            },
+        )
+        .await
+        .unwrap();
+    let pool = super::super::HarnessPool::new();
+    pool.agents
+        .write()
+        .await
+        .insert(company.clone(), vec![Arc::new(agent)]);
+    let result = pool
+        .run(
+            &company,
+            "ceo",
+            message,
+            &dependencies,
+            ChatTarget::default(),
+        )
+        .await;
+    let error = result.expect_err("retrieval must not hide the zero-tool budget");
+    assert!(
+        error.to_string().contains("max tool calls (0) exceeded"),
+        "{error}"
+    );
+    assert_eq!(model_calls(&script), 1);
+    assert!(
+        script.seen.lock().unwrap()[0]
+            .to_string()
+            .contains("RETRIEVED_BUDGET_MARKER")
+    );
+    *script.turns.lock().unwrap() = read_then_answer(1, "Unbounded next task completed.");
+    let next = pool
+        .run(
+            &company,
+            "ceo",
+            "Read the budget regression note",
+            &dependencies,
+            ChatTarget::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(next.reply, "Unbounded next task completed.");
+    assert_eq!(
+        model_calls(&script),
+        3,
+        "a remembered limit must not become the next task's policy"
+    );
+}

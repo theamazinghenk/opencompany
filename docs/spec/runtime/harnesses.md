@@ -462,3 +462,17 @@ constants are the only pieces of the front door this crate uses.
 | the desktop's own wiring | `crates/opencompany-app/src/embedded.rs` |
 | runner transport (declared, not yet an engine) | `src/runner/dispatch.rs` |
 | per-harness roster narrowing | `HarnessDeps::serves` |
+
+## Delegated tool-call budgets
+
+`delegate_to_teammate` accepts optional `max_tool_calls` (0–1024). This is a hard
+invocation limit: discovery and memory tools count, and a refused call must not
+perform its side effect. The budget travels with the persisted instruction as
+a leading `[tool_call_limit=N]` control line. Only the original brief's first
+line is policy; automatically retrieved outcomes cannot impose or hide a limit.
+An existing stricter leading limit is retained when redelegating.
+
+The OpenHuman scope narrows the existing iteration-derived limit and resets
+after the turn. It is not a shared aggregate budget across independently
+spawned child runs. This change requires the companion OpenHuman scoped-budget
+API before the host's vendor pin can be updated and this patch merged.

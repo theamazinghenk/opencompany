@@ -178,7 +178,8 @@ pub fn delegate_to_teammate_schema() -> Value {
         "type": "object",
         "properties": {
             "teammate": { "type": "string", "description": "The roster id of the teammate to hand the work to." },
-            "instruction": { "type": "string", "description": "The instruction for that teammate." }
+            "instruction": { "type": "string", "description": "The instruction for that teammate." },
+            "max_tool_calls": { "type": "integer", "minimum": 0, "maximum": 1024, "description": "Hard tool-call budget for the teammate. Discovery and memory calls also count." }
         },
         "required": ["teammate", "instruction"],
         "additionalProperties": false

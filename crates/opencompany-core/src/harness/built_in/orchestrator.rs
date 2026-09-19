@@ -3275,6 +3275,7 @@ impl Tool for DelegateToTeammateTool {
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let teammate = required_str(&args, "teammate")?;
         let instruction = required_str(&args, "instruction")?;
+        let instruction = super::turn_limits::bounded_brief(&args, instruction)?;
 
         let grounding = self.ground(&teammate).await;
         if let Some(refusal) = grounding.refusal {
