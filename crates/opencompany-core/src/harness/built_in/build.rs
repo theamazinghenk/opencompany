@@ -1711,7 +1711,8 @@ pub(crate) fn file_tools(workspace: &Path) -> Vec<Box<dyn Tool>> {
 #[path = "build_tests.rs"]
 mod tests;
 
-/// Disclosure identity only: this does not construct tools or change grants.
+/// Select a definition label whose pack disclosure preserves host-granted tools.
+/// This also changes OpenHuman transcript labels; it does not change grants.
 fn host_toolpack_identity(agent_id: &str, orchestrator: bool, composio: bool) -> &str {
     if orchestrator {
         "workflow_builder"

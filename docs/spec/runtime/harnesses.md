@@ -469,5 +469,8 @@ The coordinator uses OpenHuman's `workflow_builder` tool-pack disclosure identit
 which owns both workflow and Composio packs. This preserves the workflow tools
 OpenCompany already placed in its tool vector, including when Composio is enabled.
 Integration specialists keep `integrations_agent`; other agents retain their
-existing identity. This selects schema visibility only: it does not construct
-tools, widen company grants, or confer coordinator authority on specialists.
+existing identity. This does not construct tools, widen company grants, or confer
+coordinator authority on specialists. The definition label also controls
+OpenHuman transcript filenames/metadata and the prompt context agent id. Those
+identity effects need review before adopting this workaround; a dedicated
+pack-disclosure override would avoid them.
